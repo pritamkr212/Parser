@@ -21,7 +21,7 @@ public class ReportScheduler {
 
     public void scheduleReportGeneration(MultipartFile inputFile, MultipartFile referenceFile, String cronExpression) throws IOException {
         // Process the uploaded files directly or save them as needed
-        byte[] outputCsv = reportService.generateReportFromFiles(inputFile, referenceFile);
+        byte[] outputCsv = reportService.processUploadedFiles(inputFile, referenceFile);
         // Schedule report generation based on cron expression
         // Implement your scheduling logic here
     }
