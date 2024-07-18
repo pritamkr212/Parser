@@ -1,9 +1,12 @@
 package com.parser.Parser.parser.reportService;
-;
+
+import com.parser.Parser.parser.fileParserService.CSVFileParserServiceImpl;
+import com.parser.Parser.parser.fileParserService.FileParserService;
 import com.parser.Parser.parser.model.InputData;
 import com.parser.Parser.parser.model.OutputData;
 import com.parser.Parser.parser.model.ReferenceData;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
@@ -17,43 +20,58 @@ import java.util.stream.Collectors;
 public class ReportServiceImpl implements ReportService {
 
     private final TaskScheduler taskScheduler;
-    private final FileParser<InputData> inputParser;
-    private final FileParser<ReferenceData> referenceParser;
 
     @Autowired
-    public ReportServiceImpl(TaskScheduler taskScheduler, FileParser<InputData> inputParser, FileParser<ReferenceData> referenceParser) {
+    public ReportServiceImpl(TaskScheduler taskScheduler) {
         this.taskScheduler = taskScheduler;
-        this.inputParser = inputParser;
-        this.referenceParser = referenceParser;
     }
+
+    @Autowired
+    private CSVFileParserServiceImpl service;
 
     @Override
     public byte[] processUploadedFiles(MultipartFile inputFile, MultipartFile referenceFile) throws IOException {
-        List<InputData> inputDataList = inputParser.parseFile(inputFile);
-        List<ReferenceData> referenceDataList = referenceParser.parseFile(referenceFile);
+        List<InputData> inputDataList = service.parseFile(inputFile).stream().map(data -> {
+            InputData inputData = new InputData();
+            inputData.setField1(data.get("field1"));  // Assuming "field1" is the header name in your CSV
+            inputData.setField2(data.get("field2"));  // Similarly, map other fields
+            inputData.setField3(data.get("field3"));
+            inputData.setField4(data.get("field4"));
+            inputData.setField5(new BigDecimal(data.get("field5")));
+            inputData.setRefkey1(data.get("refkey1"));
+            inputData.setRefkey2(data.get("refkey2"));
+            return inputData;
+        }).collect(Collectors.toList());
 
-        // Perform transformation
+        List<ReferenceData> referenceDataList = service.parseFile(referenceFile)
+                .stream()
+                .map(data -> {
+                    ReferenceData referenceData = new ReferenceData();
+                    referenceData.setRefkey1(data.get("refkey1"));
+                    referenceData.setRefdata1(data.get("refdata1"));
+                    referenceData.setRefkey2(data.get("refkey2"));
+                    referenceData.setRefdata2(data.get("refdata2"));
+                    referenceData.setRefdata3(data.get("refdata3"));
+                    referenceData.setRefdata4(new BigDecimal(data.get("refdata4")));
+                    return referenceData;
+                })
+                .collect(Collectors.toList());
+
         List<OutputData> outputDataList = transformData(inputDataList, referenceDataList);
-
-        // Convert outputDataList to CSV byte array (or other format as needed)
         byte[] csvBytes = convertToCSVBytes(outputDataList);
-
         return csvBytes;
     }
 
     @Override
     public void scheduleReportGeneration(String cronExpression) {
         Runnable task = () -> {
-            // Implement scheduled report generation logic here
             System.out.println("Scheduled report generation...");
         };
-
         taskScheduler.schedule(task, new CronTrigger(cronExpression));
     }
 
     private List<OutputData> transformData(List<InputData> inputDataList, List<ReferenceData> referenceDataList) {
-        // Implement transformation logic based on inputDataList and referenceDataList
-        // Example transformation rules
+
         return inputDataList.stream()
                 .map(inputData -> {
                     ReferenceData matchingReference = findMatchingReference(inputData, referenceDataList);
@@ -63,18 +81,17 @@ public class ReportServiceImpl implements ReportService {
                         outputData.setOutfield2(matchingReference.getRefdata1());
                         outputData.setOutfield3(matchingReference.getRefdata2() + matchingReference.getRefdata3());
                         BigDecimal maxField5Refdata4 = inputData.getField5().max(matchingReference.getRefdata4());
-                        outputData.setOutfield4(BigDecimal.valueOf(inputData.getField3()).multiply(maxField5Refdata4));
+                        outputData.setOutfield4(new BigDecimal(inputData.getField3()).multiply(maxField5Refdata4));
                         outputData.setOutfield5(maxField5Refdata4);
                         return outputData;
                     }
-                    return null; // Handle case where no matching reference is found
+                    return null;
                 })
-                .filter(outputData -> outputData != null) // Filter out null values
+                .filter(outputData -> outputData != null)
                 .collect(Collectors.toList());
     }
 
     private ReferenceData findMatchingReference(InputData inputData, List<ReferenceData> referenceDataList) {
-        // Implement logic to find matching reference data based on inputData
         return referenceDataList.stream()
                 .filter(referenceData -> referenceData.getRefkey1().equals(inputData.getRefkey1())
                         && referenceData.getRefkey2().equals(inputData.getRefkey2()))
@@ -83,11 +100,6 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private byte[] convertToCSVBytes(List<OutputData> outputDataList) {
-        // Implement logic to convert List<OutputData> to CSV byte array
-        // Example: Convert OutputData list to CSV byte array
-        // You can use a library like Apache Commons CSV or any other CSV library
-
-        // For demonstration, converting to simple CSV format
         StringBuilder csvBuilder = new StringBuilder();
         csvBuilder.append("outfield1,outfield2,outfield3,outfield4,outfield5\n");
         for (OutputData outputData : outputDataList) {
